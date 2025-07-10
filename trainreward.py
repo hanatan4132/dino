@@ -13,11 +13,13 @@ class RewardPredictor(nn.Module):
         super(RewardPredictor, self).__init__()
         # 影像編碼器 (可以和影像預測模型共用或獨立)
         self.encoder = nn.Sequential(
-            nn.Conv2d(2, 32, kernel_size=8, stride=4), # 輸入 2 幀, [B, 2, 128, 128] -> [B, 32, 31, 31]
+            nn.Conv2d(2, 32, kernel_size=4, stride=2), # 輸入 2 幀, [B, 2, 128, 128] -> [B, 32, 31, 31]
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=4, stride=2), # -> [B, 64, 14, 14]
             nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1), # -> [B, 64, 12, 12]
+            nn.Conv2d(64, 64, kernel_size=3, stride=2), # -> [B, 64, 12, 12]
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=1), # -> [B, 64, 12, 12]
             nn.ReLU(),
             nn.Flatten() # -> [B, 64 * 12 * 12] = [B, 9216]
         )
@@ -27,7 +29,7 @@ class RewardPredictor(nn.Module):
         
         # 全連接層 (分類器)
         self.fc = nn.Sequential(
-            nn.Linear(9216 + embedding_dim, 256),
+            nn.Linear(18432 + embedding_dim, 256),
             nn.ReLU(),
             nn.Linear(256, 1) # 輸出一個數值，代表預測的 reward
         )
@@ -193,7 +195,7 @@ def train_reward_predictor(model, dataloader, optimizer, criterion, num_epochs, 
 
 if __name__ == "__main__":
     # --- 超參數設定 ---
-    DATASET_NPZ_PATH = "dino_dataset.npz"
+    DATASET_NPZ_PATH = "dino_reward_dataset.npz"
     SAVE_DIR = "dino_reward_models"
     BATCH_SIZE = 64
     LEARNING_RATE = 0.0001

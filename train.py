@@ -9,39 +9,56 @@ import matplotlib.pyplot as plt
 # --- 1. 網路架構佔位符 (之後你需要實現這些網路) ---
 
 class ImagePredictionNet(nn.Module):
-    def __init__(self, action_size=3):
+    def __init__(self, action_size=3, action_embedding_dim=64):
         super(ImagePredictionNet, self).__init__()
-        # TODO: 在這裡定義你的網路架構
-        # 範例：一個簡單的 CNN Encoder-Decoder
-        # Encoder
+        
+        # --- 1. Encoder (保持不變) ---
+        # 輸出 shape: [B, 256, 8, 8]
         self.encoder = nn.Sequential(
-            nn.Conv2d(2, 32, kernel_size=4, stride=2, padding=1), # 輸入是2幀, [B, 2, 128, 128] -> [B, 32, 64, 64]
+            nn.Conv2d(2, 32, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1), # -> [B, 64, 32, 32]
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1), # -> [B, 128, 16, 16]
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1), # -> [B, 256, 8, 8]
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU() # <<< 加上 ReLU
         )
-        # 動作嵌入
-        self.action_embedding = nn.Linear(action_size, 256 * 8 * 8)
         
-        # Decoder (預測下一幀)
+        # --- 2. Action Processor (新的、更合理的方式) ---
+        # 我們希望動作信息最終能變成一個 [B, 256, 8, 8] 的特徵圖
+        action_feature_map_channels = 256
+        action_feature_map_size = 16*16
+        
+        self.action_processor = nn.Sequential(
+            # 將動作索引 (0,1,2) 嵌入為一個向量
+            nn.Embedding(action_size, action_embedding_dim),
+            # 將嵌入向量通過一個線性層放大
+            nn.Linear(action_embedding_dim, action_feature_map_channels * action_feature_map_size),
+            nn.ReLU()
+        )
+        
+        # 儲存目標通道數以便在 forward 中使用
+        self.action_channels = action_feature_map_channels
+
+        # --- 3. Decoder (輸入通道數需要更新) ---
+        # 融合後的通道數 = 影像通道(256) + 動作通道(256) = 512
+        decoder_input_channels = 256 + self.action_channels
+        
         self.decoder1 = nn.Sequential(
-            nn.ConvTranspose2d(256 * 2, 128, kernel_size=4, stride=2, padding=1), # -> [B, 128, 16, 16]
+            nn.ConvTranspose2d(decoder_input_channels, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1), # -> [B, 64, 32, 32]
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1), # -> [B, 32, 64, 64]
+            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(32, 1, kernel_size=4, stride=2, padding=1), # -> [B, 1, 128, 128]
-            #nn.Sigmoid() # 確保輸出在 0-1 之間
+            nn.ConvTranspose2d(32, 1, kernel_size=4, stride=2, padding=1),
+            #nn.Sigmoid() # 推薦加上 Sigmoid，將輸出值限制在 [0, 1]，匹配正規化的輸入
         )
         
-        # Decoder (預測下兩幀) - 可以共享部分權重或完全獨立
-        # 為了簡單起見，我們用相同的架構
+        # 為了簡單，decoder2 使用相同結構
         self.decoder2 = nn.Sequential(
-            nn.ConvTranspose2d(256 * 2, 128, kernel_size=4, stride=2, padding=1),
+            nn.ConvTranspose2d(decoder_input_channels, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
@@ -52,33 +69,33 @@ class ImagePredictionNet(nn.Module):
         )
 
     def forward(self, s_t, s_t_plus_1, action):
-        # 將兩幀影像在 channel 維度上合併
+        # 1. 影像編碼
+        # x shape: [B, 2, 128, 128]
         x = torch.cat([s_t, s_t_plus_1], dim=1)
-        # 編碼
-        encoded = self.encoder(x)
-        encoded_flat = encoded.view(encoded.size(0), -1)
+        # encoded_image shape: [B, 256, 8, 8]
+        encoded_image = self.encoder(x)
         
-        # --- 關鍵修改部分 ---
-        # 1. 確保 action 是一個 1D 的 batch of actions, [B]
-        # 原始 action shape: [B, 1] -> squeeze(1) -> [B]
+        # 獲取 batch size 和空間維度 H, W
+        batch_size, _, h, w = encoded_image.shape
+
+        # 2. 動作處理
+        # action shape: [B, 1] -> squeeze -> [B]
         action = action.squeeze(1)
+        # action_processed shape: [B, 256 * 8 * 8]
+        action_processed = self.action_processor(action)
         
-        # 2. 將動作轉換為 one-hot 編碼, shape: [B, num_classes]
-        action_one_hot = nn.functional.one_hot(action.to(torch.int64), num_classes=3).float()
+        # 將扁平的動作特徵重塑為特徵圖
+        # action_feature_map shape: [B, 256, 8, 8]
+        action_feature_map = action_processed.view(batch_size, self.action_channels, h, w)
         
-        # 3. 嵌入 one-hot 編碼, shape: [B, embedding_size]
-        action_embedded = self.action_embedding(action_one_hot)
-        
-        # 現在 encoded_flat 和 action_embedded 都是 2D 張量
-        # encoded_flat.shape: [B, 256 * 8 * 8]
-        # action_embedded.shape: [B, 256 * 8 * 8]
-        # 可以安全地拼接
-        combined = torch.cat([encoded_flat, action_embedded], dim=1)
-        combined_reshaped = combined.view(combined.size(0), -1, 8, 8)
-        
-        # 解碼，預測未來兩幀
-        pred_s_t_plus_2 = self.decoder1(combined_reshaped)
-        pred_s_t_plus_3 = self.decoder2(combined_reshaped)
+        # 3. 特徵融合
+        # 在通道維度 (dim=1) 上拼接
+        # combined_features shape: [B, 512, 8, 8]
+        combined_features = torch.cat([encoded_image, action_feature_map], dim=1)
+
+        # 4. 解碼
+        pred_s_t_plus_2 = self.decoder1(combined_features)
+        pred_s_t_plus_3 = self.decoder2(combined_features)
         
         return pred_s_t_plus_2, pred_s_t_plus_3
 
@@ -219,15 +236,18 @@ def train_image_predictor(model, dataloader, optimizer, criterion, num_epochs, d
 
                 action_names = ["Run", "Jump", "Duck"]
                 act_name = action_names[action_sample.item()]
+                fig, axes = plt.subplots(1, 6, figsize=(20, 4))
                 fig.suptitle(f"Epoch {epoch+1} - Action: {act_name} - Loss: {avg_loss:.4f}")
 
                 for i, (img, title) in enumerate(imgs):
-                    axes[i].imshow(img, cmap='gray')
+                    axes[i].imshow(img, cmap='gray', vmin=0, vmax=255) # 明确像素范围
                     axes[i].set_title(title)
                     axes[i].axis('off')
                 
-                plt.draw()
-                plt.pause(0.01)
+                # 使用 plt.show() 来显示新图，并设置 block=False
+                # 这比 plt.draw() + plt.pause() 在 Spyder 中更可靠
+                plt.show(block=False) 
+                plt.pause(0.1) # 暂停一下，确保有时间渲染和观看
 
     # 訓練結束
     torch.save(model.state_dict(), os.path.join(save_dir, 'final_image_model.pth'))

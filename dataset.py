@@ -7,7 +7,7 @@ from dino import DinoGameEnv
 import pygame
 # --- 設定 ---
 DATASET_PATH = "dino_dataset.npz"
-NUM_EPISODES_TO_COLLECT = 100
+NUM_EPISODES_TO_COLLECT = 300
 MAX_FRAMES_PER_EPISODE = 2000
 # <<< 新增設定：模式切換機率 >>>
 # 每幀有 1% 的機率切換模式
@@ -129,19 +129,26 @@ class DataCollector:
         print(f"Episode finished. Total data points collected: {len(self.dataset['a_t'])}")
 
     def save_data(self, path):
-        """
-        將收集到的資料儲存到檔案
-        (此函式內容不變)
-        """
+        """將收集到的資料儲存到檔案"""
         if not self.dataset['a_t']:
             print("No data collected. Skipping save.")
             return
 
-        for key in self.dataset:
-            self.dataset[key] = np.array(self.dataset[key], dtype=np.uint8 if 's_' in key else np.int8)
+        processed_dataset = {}
+        for key, value in self.dataset.items():
+            if key.startswith('s_'):
+                dtype = np.uint8
+            elif key.startswith('a_'):
+                dtype = np.int16
+            elif key.startswith('r_'):
+                dtype = np.float32
+            else:
+                dtype = None 
+            
+            processed_dataset[key] = np.array(value, dtype=dtype)
 
-        np.savez_compressed(path, **self.dataset)
-        print(f"Dataset saved to {path}. Shape of s_t: {self.dataset['s_t'].shape}")
+        np.savez_compressed(path, **processed_dataset)
+        print(f"Dataset saved to {path}. Shape of s_t: {processed_dataset['s_t'].shape}")
 
 # --- 修改後的主執行區塊 ---
 if __name__ == '__main__':

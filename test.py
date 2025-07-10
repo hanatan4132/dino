@@ -179,4 +179,4 @@ if __name__ == "__main__":
     pygame.init()
 
     tester = WorldModelTester(model_path=MODEL_PATH)
-    tester.run_interactive_test(num_rollouts=5) # 讓模型連續想像5次 (總共會產生 2 + 2*5 = 12 幀)
+    tester.run_interactive_test(num_rollouts=1) # 讓模型連續想像5次 (總共會產生 2 + 2*5 = 12 幀)
