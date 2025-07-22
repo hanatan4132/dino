@@ -31,9 +31,9 @@ BG = pygame.image.load(os.path.join("Assets/Other", "Track.png"))
 # --- 遊戲物件類別 (稍微修改以移除全域變數依賴) ---
 class Dinosaur:
     X_POS = 80
-    Y_POS = 310
-    Y_POS_DUCK = 340
-    JUMP_VEL = 8.05
+    Y_POS = 300
+    Y_POS_DUCK = 330
+    JUMP_VEL = 8
 
     def __init__(self):
         self.duck_img = DUCKING
@@ -158,7 +158,7 @@ class Bird(Obstacle):
     def __init__(self, image):
         self.type = 0
         super().__init__(image, self.type)
-        self.rect.y = 250
+        self.rect.y = 240
         self.index = 0
 
 
@@ -216,11 +216,12 @@ class DinoGameEnv:
         
         # 產生新障礙物
         if len(self.obstacles) == 0:
-            if random.randint(0, 2) == 0:
+            obst = random.randint(0, 2)
+            if obst == 0:
                 self.obstacles.append(SmallCactus(SMALL_CACTUS))
-            elif random.randint(0, 2) == 1:
+            elif obst == 1:
                 self.obstacles.append(LargeCactus(LARGE_CACTUS))
-            elif random.randint(0, 2) == 2:
+            else:
                 self.obstacles.append(Bird(BIRD))
         
         # 更新障礙物、雲和背景的位置
@@ -245,21 +246,22 @@ class DinoGameEnv:
         for obstacle in self.obstacles:
             if not obstacle.passed and self.player.dino_rect.x > obstacle.rect.x + obstacle.rect.width:
                 obstacle.passed = True
-                reward += 30
-                # print("Passed an obstacle! +30 Reward!") # 可以取消註解來除錯
+                reward += 10
+                #print("Passed an obstacle! +30 Reward!") # 可以取消註解來除錯
 
             # 碰撞檢測
             if self.player.dino_rect.colliderect(obstacle.rect):
                 done = True
-                reward = -50  # 死亡懲罰
+                reward = -100  # 死亡懲罰
                 break
         
         # 如果還沒死，才計算得分獎勵
         if not done:
             self.points += 1
+            
             if self.points > 0 and self.points % 100 == 0:
                 self.game_speed += 1
-                reward += 5 # 得分獎勵
+                reward += 1 # 得分獎勵'''
 
         # 移除畫面外的障礙物
         self.obstacles = [obs for obs in self.obstacles if obs.rect.x > -obs.rect.width]
@@ -267,7 +269,7 @@ class DinoGameEnv:
         # === 5. 渲染並控制幀率 ===
         if self.render_mode == 'human':
             self.render()
-        self.clock.tick(120) # 建議不要太快，30或60比較穩定
+        #self.clock.tick(20) # 建議不要太快，30或60比較穩定
 
         # === 6. 返回結果 ===
         return state, reward, done

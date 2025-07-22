@@ -99,15 +99,7 @@ class ImagePredictionNet(nn.Module):
         
         return pred_s_t_plus_2, pred_s_t_plus_3
 
-class RewardPredictor(nn.Module):
-    def __init__(self):
-        super(RewardPredictor, self).__init__()
-        # TODO: 之後你可以實現獎勵預測網路
-        pass
-    
-    def forward(self, x):
-        # TODO: 實現前向傳播
-        pass
+
 
 
 # --- 2. 專為恐龍遊戲設計的 Dataset 類 ---

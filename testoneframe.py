@@ -136,6 +136,7 @@ class WorldModelTester:
         """將想像中的畫面序列繪製出來"""
         num_frames = len(frames)
         # 轉換為 numpy array 以便顯示
+        
         np_frames = [f.cpu().squeeze().numpy() for f in frames]
         
         # 決定 subplot 的行列數
@@ -146,6 +147,7 @@ class WorldModelTester:
         plt.suptitle("Model's Imagination Rollout", fontsize=16)
         
         for i, frame in enumerate(np_frames):
+            print(frame.min(), frame.max())
             plt.subplot(rows, cols, i + 1)
             plt.imshow(frame, cmap="gray", vmin=0, vmax=1)
             
@@ -179,4 +181,4 @@ if __name__ == "__main__":
     pygame.init()
 
     tester = WorldModelTester(model_path=MODEL_PATH)
-    tester.run_interactive_test(num_rollouts=5) # 讓模型連續想像5次 (總共會產生 2 + 2*5 = 12 幀)
+    tester.run_interactive_test(num_rollouts=1) # 讓模型連續想像5次 (總共會產生 2 + 2*5 = 12 幀)
