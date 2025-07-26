@@ -158,7 +158,7 @@ class Bird(Obstacle):
     def __init__(self, image):
         self.type = 0
         super().__init__(image, self.type)
-        self.rect.y = 240
+        self.rect.y = 260
         self.index = 0
 
 
@@ -182,7 +182,7 @@ class DinoGameEnv:
             self.screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 
         self.clock = pygame.time.Clock()
-        self.action_space = 3  # 0: run, 1: jump, 2: duck
+        self.action_space = 2  # 0: run, 1: jump, 2: duck
         self.observation_shape = (128, 128) # <<< 我帮你把尺寸改成了128x128
         self.reset()
 
@@ -216,7 +216,7 @@ class DinoGameEnv:
         
         # 產生新障礙物
         if len(self.obstacles) == 0:
-            obst = random.randint(0, 2)
+            obst = random.randint(0, 1)
             if obst == 0:
                 self.obstacles.append(SmallCactus(SMALL_CACTUS))
             elif obst == 1:
@@ -260,6 +260,7 @@ class DinoGameEnv:
             self.points += 1
             
             if self.points > 0 and self.points % 100 == 0:
+                #print(self.points)
                 self.game_speed += 1
                 reward += 1 # 得分獎勵'''
 
@@ -269,7 +270,7 @@ class DinoGameEnv:
         # === 5. 渲染並控制幀率 ===
         if self.render_mode == 'human':
             self.render()
-        #self.clock.tick(20) # 建議不要太快，30或60比較穩定
+        #self.clock.tick(30) # 建議不要太快，30或60比較穩定
 
         # === 6. 返回結果 ===
         return state, reward, done

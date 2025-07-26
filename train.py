@@ -22,6 +22,8 @@ class ImagePredictionNet(nn.Module):
             nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU() # <<< 加上 ReLU
         )
         
@@ -43,10 +45,12 @@ class ImagePredictionNet(nn.Module):
 
         # --- 3. Decoder (輸入通道數需要更新) ---
         # 融合後的通道數 = 影像通道(256) + 動作通道(256) = 512
-        decoder_input_channels = 256 + self.action_channels
+        decoder_input_channels = 512 + self.action_channels
         
         self.decoder1 = nn.Sequential(
-            nn.ConvTranspose2d(decoder_input_channels, 128, kernel_size=3, stride=1, padding=1),
+            nn.ConvTranspose2d(decoder_input_channels, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(256, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
@@ -58,7 +62,9 @@ class ImagePredictionNet(nn.Module):
         
         # 為了簡單，decoder2 使用相同結構
         self.decoder2 = nn.Sequential(
-            nn.ConvTranspose2d(decoder_input_channels, 128, kernel_size=3, stride=1, padding=1),
+            nn.ConvTranspose2d(decoder_input_channels, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(256, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
@@ -215,6 +221,7 @@ def train_image_predictor(model, dataloader, optimizer, criterion, num_epochs, d
                 def to_img(tensor):
                     # 將 (1, 1, H, W) 的 tensor 轉為 (H, W) 的 numpy array
                     img = tensor.cpu().squeeze().numpy()
+                    print(img.min(),img.max())
                     return (img * 255).astype(np.uint8)
 
                 imgs = [
@@ -225,7 +232,7 @@ def train_image_predictor(model, dataloader, optimizer, criterion, num_epochs, d
                     (to_img(pred_s_t_plus_3), 'pred s_t+3'),
                     (to_img(s_t_plus_3_true_sample), 'true s_t+3')
                 ]
-
+                
                 action_names = ["Run", "Jump", "Duck"]
                 act_name = action_names[action_sample.item()]
                 fig, axes = plt.subplots(1, 6, figsize=(20, 4))

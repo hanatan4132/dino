@@ -147,7 +147,7 @@ def show_tensor_img(tensor, title):
     plt.show()
 # --- 5. 核心實驗函式 (Dyna-Q 版本) ---
 def run_dynaq_experiment(exp_name, world_model, planning_steps, plot_freq=50, averaging_window=10):
-    env = DinoGameEnv(render_mode='rgb')
+    env = DinoGameEnv(render_mode='huma')
     input_shape = (STACK_SIZE, env.observation_shape[0], env.observation_shape[1])
     agent = DDQNAgent(
         input_shape, env.action_space, BUFFER_SIZE, 
@@ -206,37 +206,26 @@ def run_dynaq_experiment(exp_name, world_model, planning_steps, plot_freq=50, av
             episode_score = env.points
             
             
-            if steps % 4 == 0 :
-                states, actions, rewards, next_states, dones = agent.real_memory.sample(1)
-                state = states[0]  # shape: (2, C, H, W)
-                state = state.squeeze(0)
-                frame_1 = state[0]  # shape: (C, H, W)
-                frame_2 = state[1]  # shape: (C, H, W)
-                tensor_1 = torch.FloatTensor(frame_1).to(agent.device)
-                tensor_2 = torch.FloatTensor(frame_2).to(agent.device)
-                tensor_1 = tensor_1.unsqueeze(0)
-                tensor_2 = tensor_2.unsqueeze(0)
-                nodes = [(tensor_1, tensor_2)]
             
+            if steps % 5 == 0 :
+                tensor_1 = torch.FloatTensor(frame_t_minus_1).to(agent.device)
+                tensor_2 = torch.FloatTensor(frame_t).to(agent.device)
+                nodes = [(tensor_1, tensor_2)]
+      
             new_nodes = []
             for s2_tensor, s1_tensor in nodes:
                 for act in range(agent.num_actions):
                     # a. 使用世界模型進行預測
                     act_tensor = torch.LongTensor([[act]]).to(agent.device)
                     pred_st1p, pred_st2p, pred_reward = world_model.predict(s2_tensor, s1_tensor, act_tensor)
-
-                    #show_tensor_img(s2_tensor, "Input Frame t-2 (s2_tensor)")
-                    #show_tensor_img(s1_tensor, "Input Frame t-1 (s1_tensor)")
-                    #show_tensor_img(pred_st1p, "Predicted Frame t (pred_st1p)")
-                    #show_tensor_img(pred_st2p, "Predicted Frame t+1 (pred_st2p)")
                     # b. 將虛擬經驗存入虛擬經驗池
-                    # state 是 (s2, s1)，next_state 是 (pred_st1p, pred_st2p)
+                    
                     imagined_done = pred_reward < -40
                     agent.store_experience(
-                        np.stack([s2_tensor.squeeze().cpu().numpy(), s1_tensor.squeeze().cpu().numpy()], axis=0),
+                        np.stack([s2_tensor.cpu().numpy(), s1_tensor.cpu().numpy()], axis=1),
                         act,
                         pred_reward,
-                        np.stack([pred_st1p.squeeze().cpu().numpy(), pred_st2p.squeeze().cpu().numpy()], axis=0),
+                        np.stack([pred_st1p.squeeze(0).cpu().numpy(), pred_st2p.squeeze(0).cpu().numpy()], axis=1),
                         imagined_done,
                         is_virtual=True
                     )
@@ -247,16 +236,10 @@ def run_dynaq_experiment(exp_name, world_model, planning_steps, plot_freq=50, av
             # 更新節點列表
             nodes = new_nodes
             
+            
             '''
-            states, actions, rewards, next_states, dones = agent.real_memory.sample(1)
-            state = states[0]  # shape: (2, C, H, W)
-            state = state.squeeze(0)
-            frame_1 = state[0]  # shape: (C, H, W)
-            frame_2 = state[1]  # shape: (C, H, W)
-            tensor_1 = torch.FloatTensor(frame_1).to(agent.device)
-            tensor_2 = torch.FloatTensor(frame_2).to(agent.device)
-            tensor_1 = tensor_1.unsqueeze(0)
-            tensor_2 = tensor_2.unsqueeze(0)
+            tensor_1 = torch.FloatTensor(frame_t_minus_1).to(agent.device)
+            tensor_2 = torch.FloatTensor(frame_t).to(agent.device)
             
             for i in range(15):
                 # 隨機選擇動作
@@ -270,13 +253,16 @@ def run_dynaq_experiment(exp_name, world_model, planning_steps, plot_freq=50, av
                     np.stack([tensor_1.squeeze().cpu().numpy(), tensor_2.squeeze().cpu().numpy()], axis=0),
                     action,
                     pred_reward,
-                    np.stack([tensor_2.squeeze().cpu().numpy(), pred_st1p.squeeze().cpu().numpy()], axis=0),
+                    np.stack([pred_st1p.squeeze().cpu().numpy(), pred_st2p.squeeze().cpu().numpy()], axis=0),
                     imagined_done,
                     is_virtual=True
                 )
 
                 tensor_1, tensor_2 = pred_st1p.squeeze(0), pred_st2p.squeeze(0)
+            '''
+             
             
+            '''
             tensor_1 = torch.FloatTensor(frame_t_minus_1).to(agent.device)
             tensor_2 = torch.FloatTensor(frame_t).to(agent.device)
             prediction_tree[current_position] = (tensor_1, tensor_2, None, None)
@@ -299,10 +285,10 @@ def run_dynaq_experiment(exp_name, world_model, planning_steps, plot_freq=50, av
                         imagined_done = pred_reward < -40
                         # 將預測出的虛擬經驗存入虛擬經驗池
                         agent.store_experience(
-                            np.stack([p_prev_frame_2.cpu().numpy(), p_prev_frame_1.cpu().numpy()], axis=1),
+                            np.stack([p_prev_frame_2.squeeze().cpu().numpy(), p_prev_frame_1.squeeze().cpu().numpy()], axis=0),
                             imagined_action,
                             pred_reward,
-                            np.stack([p_prev_frame_1.cpu().numpy(), pred_st1p.squeeze(0).cpu().numpy()], axis=1),
+                            np.stack([pred_st1p.squeeze().cpu().numpy(), pred_st2p.squeeze().cpu().numpy()], axis=0),
                             imagined_done,
                             is_virtual=True
                         )
@@ -313,9 +299,13 @@ def run_dynaq_experiment(exp_name, world_model, planning_steps, plot_freq=50, av
             # c. 更新當前位置指針，循環使用預測樹
             current_position = (current_position + 1) % 15
             '''
+            
+            
             # --- 4. 從虛擬經驗中學習 ---
-            if total_steps % 20 == 0:
+            if total_steps % 30 == 0:
                 agent.learn(is_virtual=True)
+            
+            
             
             epsilon = max(EPSILON_END, EPSILON_START - total_steps / EPSILON_DECAY)
             
@@ -345,25 +335,25 @@ def run_dynaq_experiment(exp_name, world_model, planning_steps, plot_freq=50, av
     return averaged_scores
 
 
-EXPERIMENT_NAME = "DynaQ_Dino 深廣planning4 "
+EXPERIMENT_NAME = "DynaQ_Dino 深廣planning5"
 
 GRADIENT_CLIP_VALUE = 500 # 梯度裁剪的範數上限，1.0 是個常用的好起點
 SCHEDULER_STEP_SIZE = 200 # 每 1000 個 episodes，學習率衰減一次
 SCHEDULER_GAMMA = 0.9
-NUM_RUNS = 5; TOTAL_EPISODES = 4000
-AVERAGING_WINDOW = 10; PLOT_FREQUENCY = 500
+NUM_RUNS = 5; TOTAL_EPISODES = 2000
+AVERAGING_WINDOW = 20; PLOT_FREQUENCY = 500
 PLANNING_STEPS = 5 # <<< Dyna-Q 的核心參數
 
 # DDQN 超參數
 STACK_SIZE = 2 # <<< 必須是 2
-GAMMA, EPSILON_START, EPSILON_END, EPSILON_DECAY = 0.99, 1.0, 0.1, 100000
-BUFFER_SIZE, TARGET_UPDATE_FREQ = 10000, 250
+GAMMA, EPSILON_START, EPSILON_END, EPSILON_DECAY = 0.99, 1.0, 0.035, 100000
+BUFFER_SIZE, TARGET_UPDATE_FREQ = 6000, 250
 TAU =  1e-3
 # <<< 新的、分離的超參數 >>>
 BATCH_SIZE_REAL = 64
 BATCH_SIZE_VIRTUAL = 16 # 虛擬經驗的 batch size 可以不同
 LEARNING_RATE_REAL = 0.0001
-LEARNING_RATE_VIRTUAL = 3e-5 # 虛擬經驗使用更小的學習率
+LEARNING_RATE_VIRTUAL = 0.00003 # 虛擬經驗使用更小的學習率
 # 模型路徑
 IMAGE_MODEL_PATH = "dino_world_models/best_image_model.pth"
 REWARD_MODEL_PATH = "dino_reward_models/best_reward_model.pth"

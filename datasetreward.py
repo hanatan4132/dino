@@ -8,9 +8,9 @@ import pygame
 # --- 設定 ---
 # 儲存為新的檔名，以區分資料集
 DATASET_PATH = "dino_reward_dataset.npz" 
-NUM_EPISODES_TO_COLLECT = 500 # 為了得到足夠的非0.1樣本，可以增加局數
+NUM_EPISODES_TO_COLLECT = 800 # 為了得到足夠的非0.1樣本，可以增加局數
 MAX_FRAMES_PER_EPISODE = 2000
-MODE_SWITCH_PROBABILITY = 0.01
+MODE_SWITCH_PROBABILITY = 0.005
 
 # <<< 新增設定：降采样（Down-sampling） >>>
 REWARD_THRESHOLD = 0.2  # 我們認為絕對值小於這個的獎勵是“低信息量”的
@@ -76,7 +76,10 @@ class RewardDataCollector:
         done = False
         self.frame_count = 0
         self.duck_persistence_frames = 0
-        self.current_mode = random.choice(['expert', 'random'])
+        if random.random() < 0.3:
+            self.current_mode = 'expert'
+        else:
+            self.current_mode = 'random'
         
         # 只需要一個能裝兩幀的 buffer
         frame_buffer = deque(maxlen=2)

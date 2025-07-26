@@ -7,7 +7,7 @@ from dino import DinoGameEnv
 import pygame
 # --- 設定 ---
 DATASET_PATH = "dino_dataset.npz"
-NUM_EPISODES_TO_COLLECT = 300
+NUM_EPISODES_TO_COLLECT = 500
 MAX_FRAMES_PER_EPISODE = 2000
 # <<< 新增設定：模式切換機率 >>>
 # 每幀有 1% 的機率切換模式
@@ -80,7 +80,10 @@ class DataCollector:
         self.frame_count = 0
         duck=0
         # <<< 修改：在每局開始時隨機決定初始模式 >>>
-        self.current_mode = random.choice(['expert', 'random'])
+        if random.random() < 0.3:
+            self.current_mode = 'expert'
+        else:
+            self.current_mode = 'random'
         print(f"Episode starting with mode: {self.current_mode}")
         
         frame_buffer = deque(maxlen=4)
@@ -114,7 +117,7 @@ class DataCollector:
             frame_buffer.append(state_plus_3)
             
             s_t, s_t_plus_1, s_t_plus_2, s_t_plus_3 = list(frame_buffer)
-            if reward2 > 28 or reward2 < -30 :
+            if reward2 > 8 or reward2 < -30 :
                 reward = reward2
             self.dataset['s_t'].append(s_t)
             self.dataset['s_t_plus_1'].append(s_t_plus_1)
