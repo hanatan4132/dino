@@ -72,35 +72,33 @@ class WorldModelTester:
                 action_to_take = 0
 
             if action_to_take is not None:
-                initial_action = action_to_take
-                print(f"\nPlayer chose action: {self.action_names[initial_action]}. Predicting {num_rollouts} steps...")
-
-                imagined_frames = [self.prev_frame_t_minus_1, self.prev_frame_t]
-                imagined_actions = []
-
+                action = action_to_take
+                print(f"\nPlayer chose action: {self.action_names[action]}. Comparing prediction vs real for 2 steps...")
+            
+                # 真實世界跑兩步，取得 ground truth 畫面
+                _, _, done1 = self.env.step(action)
+                gt_t_plus_1 = self.get_real_frame_and_preprocess()
+                _, _, done2 = self.env.step(action)
+                gt_t_plus_2 = self.get_real_frame_and_preprocess()
+            
+                # 用模型從 s_t_minus_1 和 s_t 預測 s_{t+1}, s_{t+2}
                 with torch.no_grad():
-                    action_tensor = torch.tensor([[initial_action]], device=self.device)
-                    imagined_actions.append(initial_action)
-
-                    pred_t_plus_1, pred_t_plus_2, *_ = self.model(imagined_frames[-2], imagined_frames[-1], action_tensor)
-                    imagined_frames.extend([pred_t_plus_1, pred_t_plus_2])
-
-                    for i in range(num_rollouts - 1):
-                        s_prev = imagined_frames[-2]
-                        s_curr = imagined_frames[-1]
-                        next_action_in_imagination = random.randint(0, 2)
-                        imagined_actions.append(next_action_in_imagination)
-                        action_tensor = torch.tensor([[next_action_in_imagination]], device=self.device)
-                        next_pred_1, next_pred_2, *_ = self.model(s_prev, s_curr, action_tensor)
-                        imagined_frames.extend([next_pred_1, next_pred_2])
-
-                self.plot_imagined_rollout(imagined_frames, imagined_actions)
-
-                _, _, done = self.env.step(initial_action)
-                self.prev_frame_t_minus_1 = self.prev_frame_t
-                self.prev_frame_t = self.get_real_frame_and_preprocess()
-
-                if done:
+                    action_tensor = torch.tensor([[action]], device=self.device)
+                    pred_t_plus_1, pred_t_plus_2, *_ = self.model(self.prev_frame_t_minus_1, self.prev_frame_t, action_tensor)
+            
+                    # 計算每幀重建 loss
+                    loss_fn = torch.nn.functional.mse_loss
+                    loss1 = loss_fn(pred_t_plus_1, gt_t_plus_1).item()
+                    loss2 = loss_fn(pred_t_plus_2, gt_t_plus_2).item()
+                    total_loss = loss1 + loss2
+            
+                    print(f"Prediction Loss:\n  step+1: {loss1:.6f}\n  step+2: {loss2:.6f}\n  Total: {total_loss:.6f}")
+            
+                # 更新 prev_frame
+                self.prev_frame_t_minus_1 = gt_t_plus_1
+                self.prev_frame_t = gt_t_plus_2
+            
+                if done1 or done2:
                     print("Game Over! Resetting environment.")
                     self.env.reset()
                     self.prev_frame_t_minus_1 = self.get_real_frame_and_preprocess()

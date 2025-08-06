@@ -7,7 +7,7 @@ from dino import DinoGameEnv
 import pygame
 # --- 設定 ---
 DATASET_PATH = "dino_dataset.npz"
-NUM_EPISODES_TO_COLLECT = 500
+NUM_EPISODES_TO_COLLECT = 1000
 MAX_FRAMES_PER_EPISODE = 2000
 # <<< 新增設定：模式切換機率 >>>
 # 每幀有 1% 的機率切換模式

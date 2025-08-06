@@ -183,7 +183,8 @@ class DinoGameEnv:
 
         self.clock = pygame.time.Clock()
         self.action_space = 2  # 0: run, 1: jump, 2: duck
-        self.observation_shape = (128, 128) # <<< 我帮你把尺寸改成了128x128
+        self.observation_shape = (256,256) 
+        #self.observation_shape = (128,128)
         self.reset()
 
     def reset(self):

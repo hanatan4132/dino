@@ -7,9 +7,27 @@ import random
 # 從環境檔案中引入環境類別和網路模型類別
 from dino import DinoGameEnv
 from train import ImagePredictionNet
-
-class WorldModelTester:
+from trainreward import RewardPredictor
+class RewardModelTester:
     def __init__(self, model_path, render_mode='human'):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = RewardPredictor(action_size=3).to(self.device)
+        self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+        self.model.eval()
+        self.s_t = None
+        self.s_t_minus_1 = None
+
+    def predict_reward(self, s1, s2, action_tensor):
+        """給定兩幀畫面，回傳預測 reward"""
+        with torch.no_grad():
+            s1 = s1.to(self.device)
+            s2 = s2.to(self.device)
+            action_tensor= action_tensor.to(self.device)
+            reward = self.model(s1, s2, action_tensor)
+            return reward.item()
+class WorldModelTester:
+    def __init__(self, model_path, rewarder, render_mode='human'):
+        self.rewarder = rewarder
         self.env = DinoGameEnv(render_mode='rgb_array') 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {self.device}")
@@ -27,7 +45,7 @@ class WorldModelTester:
 
         self.key_actions = {
             ord('w'): 1,  # W 或 上箭头 -> 跳
-            ord('s'): 2,  # S 或 下箭头 -> 蹲
+
             ord(' '): 0,  # 空白鍵 -> 跑
         }
         # OpenCV 的 waitKey 對方向鍵的編碼比較特殊，我們用 W/S 代替
@@ -52,7 +70,7 @@ class WorldModelTester:
         
         return frame_tensor.to(self.device)
 
-    def run_interactive_test(self, num_rollouts=15):
+    def run_interactive_test(self, num_rollouts=15 ):
         print("\n--- Interactive World Model Test ---")
         print("Control Keys (in the 'Live Game' window):")
         print("  W / UP Arrow:    Jump")
@@ -82,8 +100,7 @@ class WorldModelTester:
             action_to_take = None
             if key == ord('w'):
                 action_to_take = 1
-            elif key == ord('s'):
-                action_to_take = 2
+
             elif key == ord(' '):
                 action_to_take = 0
             
@@ -93,6 +110,7 @@ class WorldModelTester:
                
                imagined_frames = [self.prev_frame_t_minus_1, self.prev_frame_t]
                imagined_actions = []
+               imagined_rewards = []
 
                with torch.no_grad():
                    # <<< 核心修改 1 >>>
@@ -102,11 +120,12 @@ class WorldModelTester:
                    
                    pred_t_plus_1, pred_t_plus_2 = self.model(imagined_frames[-2], imagined_frames[-1], action_tensor)
                    imagined_frames.extend([pred_t_plus_1, pred_t_plus_2])
-
+                   reward = self.rewarder.predict_reward(pred_t_plus_1, pred_t_plus_2, action_tensor)
+                   imagined_rewards.append(reward)
                    for i in range(num_rollouts - 1):
                        s_prev = imagined_frames[-2]
                        s_curr = imagined_frames[-1]
-                       next_action_in_imagination = random.randint(0, 2)
+                       next_action_in_imagination = random.randint(0, 1)
                        imagined_actions.append(next_action_in_imagination)
                        
                        # <<< 核心修改 2 >>>
@@ -115,8 +134,10 @@ class WorldModelTester:
 
                        next_pred_1, next_pred_2 = self.model(s_prev, s_curr, action_tensor)
                        imagined_frames.extend([next_pred_1, next_pred_2])
-
-               self.plot_imagined_rollout(imagined_frames, imagined_actions)
+                       reward = self.rewarder.predict_reward(s_prev, s_curr, action_tensor)
+                       imagined_rewards.append(reward)
+                       print(f"Step {i+1}: A={next_action_in_imagination} → predicted reward = {reward:.2f}")
+               self.plot_imagined_rollout(imagined_frames, imagined_actions, imagined_rewards)
 
                _, _, done = self.env.step(initial_action)
                self.prev_frame_t_minus_1 = self.prev_frame_t
@@ -132,7 +153,7 @@ class WorldModelTester:
         self.env.close()
 
     # (plot_imagined_rollout 方法保持不變)
-    def plot_imagined_rollout(self, frames, actions):
+    def plot_imagined_rollout(self, frames, actions, rewards=None):
         """將想像中的畫面序列繪製出來"""
         num_frames = len(frames)
         # 轉換為 numpy array 以便顯示
@@ -160,6 +181,8 @@ class WorldModelTester:
                 if action_idx < len(actions):
                     act_name = self.action_names[actions[action_idx]]
                     title = f"Pred s_t+{i-1}\n(from A={act_name})"
+                    if rewards and action_idx < len(rewards):
+                        title += f"\nR={rewards[action_idx]:.2f}"
                 else:
                     title = f"Pred s_t+{i-1}"
 
@@ -169,14 +192,13 @@ class WorldModelTester:
         plt.tight_layout(rect=[0, 0, 1, 0.96])
         plt.show()
 
-
 if __name__ == "__main__":
-    # 確保模型路徑正確
-    MODEL_PATH = "dino_world_models/best_image_model.pth"
-    
-    # 引入 pygame 以便在主執行緒中初始化
     import pygame
     pygame.init()
 
-    tester = WorldModelTester(model_path=MODEL_PATH)
-    tester.run_interactive_test(num_rollouts=15) # 讓模型連續想像5次 (總共會產生 2 + 2*5 = 12 幀)
+    IMAGE_MODEL_PATH = "dino_world_models/best_image_model.pth"
+    REWARD_MODEL_PATH = "dino_reward_models/best_reward_model.pth"
+
+    rewarder = RewardModelTester(model_path=REWARD_MODEL_PATH)
+    tester = WorldModelTester(model_path=IMAGE_MODEL_PATH, rewarder=rewarder)
+    tester.run_interactive_test(num_rollouts=15)

@@ -87,6 +87,8 @@ class RewardDataCollector:
         # 執行一步來填滿 buffer
         initial_state, _, _ = self.env.step(0)
         frame_buffer.append(initial_state)
+        initial_state, _, _ = self.env.step(0)
+        frame_buffer.append(initial_state)
 
         while not done and self.frame_count < max_frames:
             self.switch_mode()
@@ -99,9 +101,14 @@ class RewardDataCollector:
             
             # 執行動作，獲取獎勵 r_t+1 和下一幀 s_t+2
             s_t_plus_2, reward, done = self.env.step(action)
+            action = self.choose_action()
             
+            # 執行動作，獲取獎勵 r_t+1 和下一幀 s_t+2
+            s_t_plus_3, reward1, done = self.env.step(action)
             # <<< 核心修改：降采样邏輯 >>>
             # 檢查獎勵是否是低信息量的
+            if  reward1 > 1:
+                    reward = reward1
             is_low_info_reward = abs(reward) < REWARD_THRESHOLD
             
             # 如果是低信息量獎勵，則按機率丟棄
@@ -110,10 +117,10 @@ class RewardDataCollector:
                 pass
             else:
                 # 保留數據
-                self.dataset['s_t'].append(s_t)
-                self.dataset['s_t_plus_1'].append(s_t_plus_1)
-                self.dataset['a_t'].append(action)
-                self.dataset['r_t_plus_1'].append(reward)
+                self.dataset['s_t_plus_2'].append(s_t)
+                self.dataset['s_t_plus_3'].append(s_t_plus_1)
+
+                self.dataset['r_t_plus_3'].append(reward)
 
             # 將新的一幀加入 buffer，準備下一次循環
             frame_buffer.append(s_t_plus_2)
